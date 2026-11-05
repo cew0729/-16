@@ -59,8 +59,7 @@ def load_data():
             menu = re.sub(r"\([^()]*\)", "", menu)
             menu = re.sub(r"（[^（）]*）", "", menu)
 
-        menu = re.sub(r"\s+", " ", menu).strip()
-        return menu
+        return re.sub(r"\s+", " ", menu).strip()
 
     baskets = []
 
@@ -164,13 +163,27 @@ st.divider()
 
 
 # --------------------------------------------------
+# 최소 동시 일수 슬라이더
+# --------------------------------------------------
+min_together = st.slider(
+    "최소 동시 일수",
+    min_value=1,
+    max_value=10,
+    value=1,
+    step=1,
+    help="선택한 일수보다 적게 함께 나온 규칙은 제외합니다.",
+)
+
+
+# --------------------------------------------------
 # 메뉴 선택 및 정렬
 # --------------------------------------------------
 all_menus = sorted(menu_counts.keys())
 
 selected_menu = st.selectbox(
-    "메뉴 선택",
+    "연관 규칙 좁혀 보기",
     ["전체 메뉴"] + all_menus,
+    key="association_menu_select",
 )
 
 sort_by = st.selectbox(
@@ -188,7 +201,9 @@ sort_column = {
 # --------------------------------------------------
 # 규칙 필터링 및 정렬
 # --------------------------------------------------
-filtered_rules = rules_df.copy()
+filtered_rules = rules_df[
+    rules_df["동시"] >= min_together
+].copy()
 
 if selected_menu != "전체 메뉴":
     filtered_rules = filtered_rules[
@@ -207,14 +222,25 @@ filtered_rules = filtered_rules.sort_values(
 # --------------------------------------------------
 st.subheader("메뉴 연관 규칙")
 
+st.write(f"현재 조건에 해당하는 규칙: **{len(filtered_rules):,}개**")
+
 if filtered_rules.empty:
-    st.info("선택한 메뉴에 해당하는 규칙이 없습니다.")
+    st.info("선택한 조건에 해당하는 규칙이 없습니다.")
 else:
     display_rules = filtered_rules.copy()
 
-    # 표시할 때만 소수점 셋째 자리까지 반올림
-    for column in ["지지도", "신뢰도", "향상도"]:
-        display_rules[column] = display_rules[column].round(3)
+    # 지지도와 신뢰도는 퍼센트, 향상도는 배수로 표시
+    display_rules["지지도"] = (
+        display_rules["지지도"] * 100
+    ).round(1).map(lambda x: f"{x:.1f}%")
+
+    display_rules["신뢰도"] = (
+        display_rules["신뢰도"] * 100
+    ).round(1).map(lambda x: f"{x:.1f}%")
+
+    display_rules["향상도"] = (
+        display_rules["향상도"]
+    ).round(3).map(lambda x: f"{x:.3f}")
 
     st.dataframe(
         display_rules[
@@ -266,8 +292,8 @@ else:
             "조건": True,
             "결과": True,
             "동시": True,
-            "지지도": ":.3f",
-            "신뢰도": ":.3f",
+            "지지도": ":.3%",
+            "신뢰도": ":.3%",
             "향상도": ":.3f",
             "규칙": False,
             "향상도표시": False,
@@ -288,3 +314,68 @@ else:
     )
 
     st.plotly_chart(fig, width="stretch")
+
+
+# --------------------------------------------------
+# 함께 나온 적 없는 짝
+# --------------------------------------------------
+st.divider()
+st.subheader("함께 나온 적 없는 짝")
+
+st.write(
+    "선택한 메뉴와 같은 날 한 번도 함께 나오지 않았지만, "
+    "혼자서는 10일 이상 나온 메뉴를 출현 횟수 순으로 보여 줍니다."
+)
+
+selected_menu_absent = st.selectbox(
+    "함께 나온 적 없는 짝을 찾을 메뉴",
+    all_menus,
+    key="absent_menu_select",
+)
+
+selected_menu_days = menu_counts[selected_menu_absent]
+
+st.write(
+    f"**{selected_menu_absent}** 메뉴가 나온 날: "
+    f"**{selected_menu_days}일**"
+)
+
+absent_candidates = []
+
+for candidate, candidate_days in menu_counts.items():
+
+    # 선택한 메뉴 자신은 제외
+    if candidate == selected_menu_absent:
+        continue
+
+    # 혼자서 10일 이상 나온 메뉴만 포함
+    if candidate_days < 10:
+        continue
+
+    pair = tuple(sorted((selected_menu_absent, candidate)))
+
+    # 두 메뉴가 한 번도 함께 나오지 않은 경우
+    if pair not in pair_counts:
+        absent_candidates.append({
+            "메뉴": candidate,
+            "출현 일수": candidate_days,
+        })
+
+absent_df = pd.DataFrame(
+    absent_candidates,
+    columns=["메뉴", "출현 일수"],
+)
+
+if absent_df.empty:
+    st.info("조건에 맞는 메뉴가 없습니다.")
+else:
+    absent_df = absent_df.sort_values(
+        by=["출현 일수", "메뉴"],
+        ascending=[False, True],
+    ).reset_index(drop=True)
+
+    st.dataframe(
+        absent_df,
+        hide_index=True,
+        width="stretch",
+    )
