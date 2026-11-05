@@ -48,11 +48,11 @@ def load_data():
     def clean_menu(menu):
         menu = str(menu).strip()
 
-        # 일반 괄호와 전각 괄호 안의 내용 제거
+        # 괄호와 괄호 안의 내용 제거
         menu = re.sub(r"\([^()]*\)", "", menu)
         menu = re.sub(r"（[^（）]*）", "", menu)
 
-        # 중첩 괄호가 있다면 반복해서 제거
+        # 중첩 괄호도 반복해서 제거
         previous = None
         while previous != menu:
             previous = menu
@@ -98,11 +98,9 @@ menu_counts = {}
 pair_counts = {}
 
 for menus in df["메뉴목록"]:
-    # 각 메뉴가 나온 날짜 수
     for menu in menus:
         menu_counts[menu] = menu_counts.get(menu, 0) + 1
 
-    # 같은 날 함께 나온 메뉴 쌍
     for a, b in combinations(menus, 2):
         pair = tuple(sorted((a, b)))
         pair_counts[pair] = pair_counts.get(pair, 0) + 1
@@ -118,7 +116,7 @@ rules = []
 
 for (a, b), together in pair_counts.items():
 
-    # 두 메뉴가 함께 나온 비율
+    # 지지도 = 함께 나온 날짜 수 / 전체 급식 일수
     support = together / total_days
 
     # A → B
@@ -188,7 +186,7 @@ sort_column = {
 
 
 # --------------------------------------------------
-# 규칙 필터링
+# 규칙 필터링 및 정렬
 # --------------------------------------------------
 filtered_rules = rules_df.copy()
 
@@ -214,11 +212,9 @@ if filtered_rules.empty:
 else:
     display_rules = filtered_rules.copy()
 
-    # 원본 숫자 데이터는 유지하고 표에 표시할 때만 문자열로 변환
+    # 표시할 때만 소수점 셋째 자리까지 반올림
     for column in ["지지도", "신뢰도", "향상도"]:
-        display_rules[column] = display_rules[column].map(
-            lambda value: f"{value:.6f}"
-        )
+        display_rules[column] = display_rules[column].round(3)
 
     st.dataframe(
         display_rules[
@@ -251,15 +247,12 @@ else:
         top_rules["조건"] + " → " + top_rules["결과"]
     )
 
-    # 그래프는 낮은 향상도부터 위에서 아래로 표시
     chart_df = top_rules.sort_values(
         "향상도",
         ascending=True,
     ).copy()
 
-    chart_df["향상도표시"] = chart_df["향상도"].map(
-        lambda value: f"{value:.3f}"
-    )
+    chart_df["향상도표시"] = chart_df["향상도"].round(3)
 
     fig = px.bar(
         chart_df,
@@ -273,9 +266,9 @@ else:
             "조건": True,
             "결과": True,
             "동시": True,
-            "지지도": ":.6f",
-            "신뢰도": ":.6f",
-            "향상도": ":.6f",
+            "지지도": ":.3f",
+            "신뢰도": ":.3f",
+            "향상도": ":.3f",
             "규칙": False,
             "향상도표시": False,
         },
